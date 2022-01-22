@@ -165,6 +165,9 @@ fn roleplayers_rules() -> Ruleset {
       SetOf { num: 3 },
       SetOf { num: 4 },
       FullHouse { value: 25 },
+      // NOTE: Source has a different meaning for small and large straight.
+      // TODO Small straight to mean 1-5 or 2-6 and large 3-7 or 4-8
+      // TODO 5-9 and 6-10 are possible, albeit improbable. Allow them too?
       Straight {
         min_length: 4,
         value: 30,
@@ -177,6 +180,30 @@ fn roleplayers_rules() -> Ruleset {
       Yahtzee { value: 50 },
     ],
   }
+}
+
+#[derive(PartialEq, Debug)]
+enum UpdateErr {
+  OutOfBounds,
+  AlreadyOccupied,
+  NotSelectable,
+}
+
+use UpdateErr::*;
+
+fn update_score_sheet(
+  score_sheet: &[Option<u64>],
+  scorings: &[Scoring],
+  selected_row: usize,
+  roll: &[u64],
+) -> Result<Vec<Option<u64>>, UpdateErr> {
+  let scoring = scorings.get(selected_row);
+  // if let None = scoring { return Err(OutOfBounds) }
+  // let current_occupant = score_sheet.get(selected_row);
+
+  // if let
+
+  Err(OutOfBounds)
 }
 
 #[cfg(test)]
@@ -320,5 +347,23 @@ mod tests {
   fn test_chance() {
     let chance = Chance {};
     assert_eq!(chance.score(&[6, 5, 4, 4, 2]), 21);
+  }
+
+  #[test]
+  fn test_bonus() {
+    let scorings = vec![
+      Numbers { num: 1 },
+      Numbers { num: 2 },
+      Bonus {
+        min_points: 8,
+        value: 10,
+      },
+      Yahtzee { value: 50 },
+    ];
+
+    let before: Vec<Option<u64>> = vec![Some(3), None, None, None];
+    let expected: Vec<Option<u64>> = vec![Some(3), Some(6), Some(8), None];
+    let actual = update_score_sheet(&before, &scorings, 1, &[2, 2, 2, 3, 4]).unwrap();
+    assert_eq!(actual, expected);
   }
 }
