@@ -43,16 +43,20 @@ impl Scoring {
         6 => "Sixes".into(),
         n => format!("{}'s", n),
       },
+
       Bonus { .. } => "Bonus".into(),
+
       SetOf { num } => match num {
         2 => "Pair".into(),
         n => format!("Set of {}", n),
       },
+
       Straight { min_length, .. } => match min_length {
         4 => "Small Straight".into(),
         5 => "Large Straight".into(),
         n => format!("Straight of {}", n),
       },
+
       FullHouse { .. } => "Full House".into(),
       Yahtzee { .. } => "Yahtzee".into(),
       Chance { .. } => "Chance".into(),
@@ -165,7 +169,7 @@ fn roleplayers_rules() -> Ruleset {
       SetOf { num: 3 },
       SetOf { num: 4 },
       FullHouse { value: 25 },
-      // NOTE: Source has a different meaning for small and large straight.
+      // NOTE Source has a different meaning for small and large straight.
       // TODO Small straight to mean 1-5 or 2-6 and large 3-7 or 4-8
       // TODO 5-9 and 6-10 are possible, albeit improbable. Allow them too?
       Straight {
@@ -189,21 +193,67 @@ enum UpdateErr {
   NotSelectable,
 }
 
-use UpdateErr::*;
-
 fn update_score_sheet(
   score_sheet: &[Option<u64>],
   scorings: &[Scoring],
-  selected_row: usize,
+  selected_index: usize,
   roll: &[u64],
 ) -> Result<Vec<Option<u64>>, UpdateErr> {
-  let scoring = scorings.get(selected_row);
-  // if let None = scoring { return Err(OutOfBounds) }
-  // let current_occupant = score_sheet.get(selected_row);
+  let scoring = scorings.get(selected_index).ok_or(UpdateErr::OutOfBounds)?;
+  let &current_row = score_sheet
+    .get(selected_index)
+    .ok_or(UpdateErr::OutOfBounds)?;
 
-  // if let
+  let mut roll_points = scoring.score(roll);
 
-  Err(OutOfBounds)
+  // The Bonus row cannot be selected.
+  if let Bonus { .. } = scoring {
+    return Err(UpdateErr::NotSelectable);
+  }
+
+  // Usually you cannot choose the same row twice.
+  // The Yahtzee row is an exception: if you get it multiple times, it accumulates.
+  if let Some(existing_points) = current_row {
+    if let Yahtzee { .. } = scoring {
+      if roll_points > 0 && existing_points > 0 {
+        roll_points += existing_points
+      } else {
+        return Err(UpdateErr::AlreadyOccupied);
+      }
+    } else {
+      return Err(UpdateErr::AlreadyOccupied);
+    }
+  }
+
+  let mut new_score_sheet = score_sheet.to_vec();
+  new_score_sheet[selected_index] = Some(roll_points);
+
+  // The bonus is scored when either all rows above it are scored, or when the threshold is exceeded.
+  // Not all scoring systems have a bonus row.
+  let maybe_bonus_row = scorings.iter().enumerate().find(|(_, scoring)| {
+    if let Bonus { .. } = scoring {
+      true
+    } else {
+      false
+    }
+  });
+  if let Some((bonus_index, Bonus { min_points, value })) = maybe_bonus_row {
+    // Our scoring rules have a bonus row
+    let bonus_affecting_rows = &new_score_sheet[..bonus_index];
+    let all_bonus_affecting_rows_filled = bonus_affecting_rows.iter().all(|&row| row.is_some());
+    let bonus_threshold_crossed = bonus_affecting_rows
+      .iter()
+      .map(|&row| if let Some(pts) = row { pts } else { 0 })
+      .sum::<u64>()
+      >= *min_points;
+
+    if all_bonus_affecting_rows_filled || bonus_threshold_crossed {
+      // Bonus will be scored now
+      new_score_sheet[bonus_index] = Some(if bonus_threshold_crossed { *value } else { 0 })
+    }
+  }
+
+  Ok(new_score_sheet)
 }
 
 #[cfg(test)]
@@ -351,19 +401,135 @@ mod tests {
 
   #[test]
   fn test_bonus() {
+    let value = 10;
     let scorings = vec![
       Numbers { num: 1 },
       Numbers { num: 2 },
       Bonus {
         min_points: 8,
-        value: 10,
+        value,
       },
       Yahtzee { value: 50 },
     ];
 
     let before: Vec<Option<u64>> = vec![Some(3), None, None, None];
-    let expected: Vec<Option<u64>> = vec![Some(3), Some(6), Some(8), None];
+    let expected: Vec<Option<u64>> = vec![Some(3), Some(6), Some(value), None];
     let actual = update_score_sheet(&before, &scorings, 1, &[2, 2, 2, 3, 4]).unwrap();
     assert_eq!(actual, expected);
+  }
+
+  #[test]
+  fn test_full_game() {
+    let scorings = vec![
+      Numbers { num: 1 }, // 0
+      Numbers { num: 2 }, // 1
+      Bonus {
+        // 2
+        min_points: 10,
+        value: 50,
+      },
+      SetOf { num: 3 },        // 3
+      FullHouse { value: 25 }, // 4
+      Straight {
+        // 5
+        min_length: 4,
+        value: 30,
+      },
+      Straight {
+        // 6
+        min_length: 5,
+        value: 40,
+      },
+      Chance {},             // 7
+      Yahtzee { value: 50 }, // 8
+    ];
+
+    let mut score_sheet: Vec<Option<u64>> = vec![None; scorings.len()];
+
+    // 8 - Yahtzee
+    score_sheet = update_score_sheet(&score_sheet, &scorings, 8, &[6, 6, 6, 6, 6]).unwrap();
+    assert_eq!(
+      score_sheet,
+      [None, None, None, None, None, None, None, None, Some(50)]
+    );
+
+    // 0 - Ones
+    score_sheet = update_score_sheet(&score_sheet, &scorings, 0, &[6, 6, 1, 1, 1]).unwrap();
+    assert_eq!(
+      score_sheet,
+      [Some(3), None, None, None, None, None, None, None, Some(50)]
+    );
+
+    // 3 - Set of 3
+    score_sheet = update_score_sheet(&score_sheet, &scorings, 3, &[6, 6, 5, 5, 5]).unwrap();
+    assert_eq!(
+      score_sheet,
+      [
+        Some(3),
+        None,
+        None,
+        Some(15),
+        None,
+        None,
+        None,
+        None,
+        Some(50)
+      ]
+    );
+
+    // 5 - Straight
+    score_sheet = update_score_sheet(&score_sheet, &scorings, 5, &[5, 5, 4, 3, 2]).unwrap();
+    assert_eq!(
+      score_sheet,
+      [
+        Some(3),
+        None,
+        None,
+        Some(15),
+        None,
+        Some(30),
+        None,
+        None,
+        Some(50)
+      ]
+    );
+
+    // 8 - OMG! YAHTZEE AGAIN!
+    score_sheet = update_score_sheet(&score_sheet, &scorings, 8, &[1, 1, 1, 1, 1]).unwrap();
+    assert_eq!(
+      score_sheet,
+      [
+        Some(3),
+        None,
+        None,
+        Some(15),
+        None,
+        Some(30),
+        None,
+        None,
+        Some(100)
+      ]
+    );
+
+    // 1 - Twos
+    score_sheet = update_score_sheet(&score_sheet, &scorings, 1, &[1, 2, 2, 2, 2]).unwrap();
+
+    // Bonus should be scored at this point!
+    assert_eq!(
+      score_sheet,
+      [
+        Some(3),
+        Some(8),
+        Some(50),
+        Some(15),
+        None,
+        Some(30),
+        None,
+        None,
+        Some(100)
+      ]
+    );
+
+    // TODO finish game :)
   }
 }
