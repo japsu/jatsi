@@ -3,6 +3,7 @@ enum Scoring {
   Bonus { min_points: u64, value: u64 },
   SetOf { num: u64 },
   Straight { min_length: u64, value: u64 },
+  TwoPairs {},
   FullHouse { value: u64 },
   Yahtzee { value: u64 },
   Chance,
@@ -57,6 +58,7 @@ impl Scoring {
         n => format!("Straight of {}", n),
       },
 
+      TwoPairs { .. } => "Two Pairs".into(),
       FullHouse { .. } => "Full House".into(),
       Yahtzee { .. } => "Yahtzee".into(),
       Chance { .. } => "Chance".into(),
@@ -90,6 +92,15 @@ impl Scoring {
         }
       }
 
+      // Not used by *ee rules but used by *y rules
+      TwoPairs {} => match *roll {
+        // remember: they're ordered
+        [x, y, z, w, _] if x == y && z == w => x + y + z + w,
+        [x, y, _, w, h] if x == y && w == h => x + y + w + h,
+        [_, y, z, w, h] if y == z && w == h => y + z + w + h,
+        _ => 0,
+      },
+
       FullHouse { value } => match *roll {
         [x, y, z, w, h] if x == y && z == w && w == h => value,
         [x, y, z, w, h] if x == y && y == z && w == h => value,
@@ -112,12 +123,20 @@ impl Scoring {
   }
 }
 
+enum JokerRule {
+  Forced,
+  FreeChoice,
+  Original,
+  NoJoker,
+}
+
 struct Ruleset {
   dice: Vec<u64>,
   scorings: Vec<Scoring>,
+  joker_rule: JokerRule, // not implemented yet
 }
 
-fn basic_rules() -> Ruleset {
+fn ee_rules() -> Ruleset {
   Ruleset {
     dice: vec![6; 5],
     scorings: vec![
@@ -145,6 +164,7 @@ fn basic_rules() -> Ruleset {
       Chance {},
       Yahtzee { value: 50 },
     ],
+    joker_rule: JokerRule::Forced,
   }
 }
 
@@ -183,6 +203,7 @@ fn roleplayers_rules() -> Ruleset {
       Chance {},
       Yahtzee { value: 50 },
     ],
+    joker_rule: JokerRule::Forced,
   }
 }
 
@@ -363,6 +384,41 @@ mod tests {
       large_straight.score(&[5, 4, 3, 1, 1]),
       0,
       "Not a large straight"
+    );
+  }
+
+  #[test]
+  fn test_two_pairs() {
+    let two_pairs = TwoPairs {};
+
+    assert_eq!(two_pairs.score(&[6, 5, 5, 4, 1]), 0, "Only one pair");
+    assert_eq!(two_pairs.score(&[5, 4, 3, 2, 1]), 0, "Not two pairs");
+
+    assert_eq!(
+      two_pairs.score(&[5, 3, 3, 1, 1]),
+      8,
+      "Two pairs with orphan at the start"
+    );
+    assert_eq!(
+      two_pairs.score(&[4, 4, 3, 2, 2]),
+      12,
+      "Two pairs with orphan in the middle"
+    );
+    assert_eq!(
+      two_pairs.score(&[6, 6, 2, 2, 1]),
+      16,
+      "Two pairs with orphan at the end"
+    );
+
+    assert_eq!(
+      two_pairs.score(&[3, 3, 3, 2, 2]),
+      10,
+      "Full house with triplet at the start also counts as two pairs"
+    );
+    assert_eq!(
+      two_pairs.score(&[6, 6, 1, 1, 1]),
+      14,
+      "Full house with triplet at the end also counts as two pairs"
     );
   }
 
