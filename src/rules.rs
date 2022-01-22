@@ -3,6 +3,28 @@ trait Scoring {
   fn score(&self, roll: &[u64]) -> u64;
 }
 
+struct Numbers {
+  num: u64,
+}
+
+impl Scoring for Numbers {
+  fn name(&self) -> String {
+    match self.num {
+      1 => "Ones".into(),
+      2 => "Twos".into(),
+      3 => "Threes".into(),
+      4 => "Fours".into(),
+      5 => "Fives".into(),
+      6 => "Sixes".into(),
+      n => format!("{}'s", n),
+    }
+  }
+
+  fn score(&self, roll: &[u64]) -> u64 {
+    roll.iter().filter(|x| **x == self.num).sum()
+  }
+}
+
 struct SetOf {
   num: u64,
 }
@@ -39,6 +61,7 @@ impl Scoring for SetOf {
 
 struct Straight {
   min_length: u64,
+  value: u64,
 }
 
 /// Find longest flush in `roll`. Initially set `acc` to 1 and `best` to 0.
@@ -71,14 +94,16 @@ impl Scoring for Straight {
 
   fn score(&self, roll: &[u64]) -> u64 {
     if longest_flush(roll, 1, 0) >= self.min_length {
-      (self.min_length - 1) * 10
+      self.value
     } else {
       0
     }
   }
 }
 
-struct FullHouse {}
+struct FullHouse {
+  value: u64,
+}
 
 impl Scoring for FullHouse {
   fn name(&self) -> String {
@@ -87,16 +112,84 @@ impl Scoring for FullHouse {
 
   fn score(&self, roll: &[u64]) -> u64 {
     match roll {
-      [x, y, z, w, h] if *x == *y && *z == *w && *w == *h => 25,
-      [x, y, z, w, h] if *x == *y && *y == *z && *w == *h => 25,
+      [x, y, z, w, h] if *x == *y && *z == *w && *w == *h => self.value,
+      [x, y, z, w, h] if *x == *y && *y == *z && *w == *h => self.value,
       _ => 0,
     }
   }
 }
 
+struct Yahtzee {
+  value: u64,
+}
+
+impl Scoring for Yahtzee {
+  fn name(&self) -> String {
+    "Yahtzee".into()
+  }
+
+  fn score(&self, roll: &[u64]) -> u64 {
+    match roll {
+      [x, rest @ ..] => {
+        if rest.iter().all(|y| *x == *y) {
+          self.value
+        } else {
+          0
+        }
+      }
+      [] => 0,
+    }
+  }
+}
+
+struct Chance {}
+
+impl Scoring for Chance {
+  fn name(&self) -> String {
+    "Chance".into()
+  }
+  fn score(&self, roll: &[u64]) -> u64 {
+    roll.iter().sum()
+  }
+}
+
+fn basic_rules() -> Vec<Box<dyn Scoring>> {
+  vec![
+    Box::new(Numbers { num: 1 }),
+    Box::new(Numbers { num: 2 }),
+    Box::new(Numbers { num: 3 }),
+    Box::new(Numbers { num: 4 }),
+    Box::new(Numbers { num: 5 }),
+    Box::new(Numbers { num: 6 }),
+    // TODO: Bonus
+    Box::new(SetOf { num: 3 }),
+    Box::new(SetOf { num: 4 }),
+    Box::new(FullHouse { value: 25 }),
+    Box::new(Straight {
+      min_length: 4,
+      value: 30,
+    }),
+    Box::new(Straight {
+      min_length: 5,
+      value: 40,
+    }),
+    Box::new(Chance {}),
+    Box::new(Yahtzee { value: 50 }),
+  ]
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn test_numbers() {
+    let ones = Numbers { num: 1 };
+
+    assert_eq!(ones.name(), "Ones");
+    assert_eq!(ones.score(&[1, 1, 1, 1, 1]), 5, "All ones");
+    assert_eq!(ones.score(&[1, 1, 1, 2, 3]), 3, "Some ones");
+  }
 
   #[test]
   fn test_pair() {
@@ -156,7 +249,10 @@ mod tests {
 
   #[test]
   fn test_small_straight() {
-    let small_straight = Straight { min_length: 4 };
+    let small_straight = Straight {
+      min_length: 4,
+      value: 30,
+    };
 
     assert_eq!(small_straight.name(), "Small Straight");
     assert_eq!(
@@ -183,16 +279,33 @@ mod tests {
 
   #[test]
   fn test_large_straight() {
-    let large_straight = Straight { min_length: 5 };
+    let large_straight = Straight {
+      min_length: 5,
+      value: 40,
+    };
 
-    // assert_eq!(
-    //   large_straight
-    // )
+    assert_eq!(
+      large_straight.score(&[6, 5, 4, 3, 2]),
+      40,
+      "Upper large straight"
+    );
+
+    assert_eq!(
+      large_straight.score(&[5, 4, 3, 2, 1]),
+      40,
+      "Lower large straight"
+    );
+
+    assert_eq!(
+      large_straight.score(&[5, 4, 3, 1, 1]),
+      0,
+      "Not a large straight"
+    );
   }
 
   #[test]
   fn test_full_house() {
-    let full_house = FullHouse {};
+    let full_house = FullHouse { value: 25 };
 
     assert_eq!(full_house.score(&[4, 3, 2, 2, 1]), 0, "Not a full house");
     assert_eq!(
@@ -205,5 +318,21 @@ mod tests {
       25,
       "Full house with triplet at the end"
     );
+  }
+
+  #[test]
+  fn test_yahtzee() {
+    let yahtzee = Yahtzee { value: 50 };
+
+    assert_eq!(yahtzee.score(&[5, 5, 5, 5, 5]), 50, "Yahtzee!!!");
+    assert_eq!(yahtzee.score(&[5, 5, 3, 5, 5]), 0, "Not a yahtzee");
+    assert_eq!(yahtzee.score(&[5, 5, 5, 5, 3]), 0, "Also not a yahtzee");
+    assert_eq!(yahtzee.score(&[3, 5, 5, 5, 5]), 0, "Nor is this yahtzee");
+  }
+
+  #[test]
+  fn test_chance() {
+    let chance = Chance {};
+    assert_eq!(chance.score(&[6, 5, 4, 4, 2]), 21);
   }
 }

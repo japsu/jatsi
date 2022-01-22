@@ -1,3 +1,9 @@
+# Yahtzee game with configurable rules
+
+The objective of this project is to play Yahtzee with the ["Roleplayer's Ruleset"](https://www.facebook.com/groups/634315316668818/posts/4325558567544456/) online with friends.
+
+Yew Trunk template README follows.
+
 # Yew Trunk Template
 
 This is a fairly minimal template for a Yew app that's built with [Trunk].
