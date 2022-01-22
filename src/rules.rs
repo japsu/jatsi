@@ -1,181 +1,182 @@
-trait Scoring {
-  fn name(&self) -> String;
-  fn score(&self, roll: &[u64]) -> u64;
+enum Scoring {
+  Numbers { num: u64 },
+  Bonus { min_points: u64, value: u64 },
+  SetOf { num: u64 },
+  Straight { min_length: u64, value: u64 },
+  FullHouse { value: u64 },
+  Yahtzee { value: u64 },
+  Chance,
 }
 
-struct Numbers {
-  num: u64,
+use Scoring::*;
+
+fn is_straight_of_at_least(min_length: u64, roll: &[u64]) -> bool {
+  match roll {
+    [x, rest @ ..] => {
+      let mut y = *x;
+
+      // if we have a straight longer than required, this will go negative, hence i64
+      let mut required = min_length as i64 - 1;
+
+      for i in rest {
+        if *i == y - 1 {
+          y = *i;
+          required -= 1;
+        }
+      }
+
+      required <= 0
+    }
+    [] => false,
+  }
 }
 
-impl Scoring for Numbers {
+impl Scoring {
   fn name(&self) -> String {
-    match self.num {
-      1 => "Ones".into(),
-      2 => "Twos".into(),
-      3 => "Threes".into(),
-      4 => "Fours".into(),
-      5 => "Fives".into(),
-      6 => "Sixes".into(),
-      n => format!("{}'s", n),
+    match *self {
+      Numbers { num } => match num {
+        1 => "Ones".into(),
+        2 => "Twos".into(),
+        3 => "Threes".into(),
+        4 => "Fours".into(),
+        5 => "Fives".into(),
+        6 => "Sixes".into(),
+        n => format!("{}'s", n),
+      },
+      Bonus { .. } => "Bonus".into(),
+      SetOf { num } => match num {
+        2 => "Pair".into(),
+        n => format!("Set of {}", n),
+      },
+      Straight { min_length, .. } => match min_length {
+        4 => "Small Straight".into(),
+        5 => "Large Straight".into(),
+        n => format!("Straight of {}", n),
+      },
+      FullHouse { .. } => "Full House".into(),
+      Yahtzee { .. } => "Yahtzee".into(),
+      Chance { .. } => "Chance".into(),
     }
   }
 
   fn score(&self, roll: &[u64]) -> u64 {
-    roll.iter().filter(|x| **x == self.num).sum()
-  }
-}
+    match *self {
+      Numbers { num } => roll.iter().filter(|&&x| x == num).sum(),
 
-struct SetOf {
-  num: u64,
-}
+      Bonus { .. } => 0, // TODO
 
-impl Scoring for SetOf {
-  fn name(&self) -> String {
-    match self.num {
-      2 => "Pair".into(),
-      n => format!("Set of {}", n),
-    }
-  }
+      SetOf { num } => match roll {
+        [x, rest @ ..] => {
+          let instances = (rest.iter().filter(|&&y| *x == y).count() + 1) as u64;
 
-  fn score(&self, roll: &[u64]) -> u64 {
-    match roll {
-      [x, rest @ ..] => {
-        let mut instances = 1;
-
-        for y in rest {
-          if x == y {
-            instances += 1;
+          if instances >= num {
+            *x * num
+          } else {
+            self.score(rest)
           }
         }
+        [] => 0,
+      },
 
-        if instances >= self.num {
-          x * self.num
-        } else {
-          self.score(rest)
-        }
-      }
-      [] => 0,
-    }
-  }
-}
-
-struct Straight {
-  min_length: u64,
-  value: u64,
-}
-
-/// Find longest flush in `roll`. Initially set `acc` to 1 and `best` to 0.
-fn longest_flush(roll: &[u64], acc: u64, best: u64) -> u64 {
-  use std::cmp::max;
-
-  match roll {
-    [x, rest @ ..] => match rest {
-      [y, ..] => {
-        if *x == *y + 1 {
-          longest_flush(rest, acc + 1, best)
-        } else {
-          longest_flush(rest, 1, max(acc, best))
-        }
-      }
-      [] => max(acc, best),
-    },
-    [] => max(acc, best),
-  }
-}
-
-impl Scoring for Straight {
-  fn name(&self) -> String {
-    match self.min_length {
-      4 => "Small Straight".into(),
-      5 => "Large Straight".into(),
-      n => format!("Straight of {}", n),
-    }
-  }
-
-  fn score(&self, roll: &[u64]) -> u64 {
-    if longest_flush(roll, 1, 0) >= self.min_length {
-      self.value
-    } else {
-      0
-    }
-  }
-}
-
-struct FullHouse {
-  value: u64,
-}
-
-impl Scoring for FullHouse {
-  fn name(&self) -> String {
-    "Full House".into()
-  }
-
-  fn score(&self, roll: &[u64]) -> u64 {
-    match roll {
-      [x, y, z, w, h] if *x == *y && *z == *w && *w == *h => self.value,
-      [x, y, z, w, h] if *x == *y && *y == *z && *w == *h => self.value,
-      _ => 0,
-    }
-  }
-}
-
-struct Yahtzee {
-  value: u64,
-}
-
-impl Scoring for Yahtzee {
-  fn name(&self) -> String {
-    "Yahtzee".into()
-  }
-
-  fn score(&self, roll: &[u64]) -> u64 {
-    match roll {
-      [x, rest @ ..] => {
-        if rest.iter().all(|y| *x == *y) {
-          self.value
+      Straight { min_length, value } => {
+        if is_straight_of_at_least(min_length, roll) {
+          value
         } else {
           0
         }
       }
-      [] => 0,
+
+      FullHouse { value } => match *roll {
+        [x, y, z, w, h] if x == y && z == w && w == h => value,
+        [x, y, z, w, h] if x == y && y == z && w == h => value,
+        _ => 0,
+      },
+
+      Yahtzee { value } => match roll {
+        [x, rest @ ..] => {
+          if rest.iter().all(|&y| *x == y) {
+            value
+          } else {
+            0
+          }
+        }
+        [] => 0,
+      },
+
+      Chance => roll.iter().sum(),
     }
   }
 }
 
-struct Chance {}
+struct Ruleset {
+  dice: Vec<u64>,
+  scorings: Vec<Scoring>,
+}
 
-impl Scoring for Chance {
-  fn name(&self) -> String {
-    "Chance".into()
-  }
-  fn score(&self, roll: &[u64]) -> u64 {
-    roll.iter().sum()
+fn basic_rules() -> Ruleset {
+  Ruleset {
+    dice: vec![6; 5],
+    scorings: vec![
+      Numbers { num: 1 },
+      Numbers { num: 2 },
+      Numbers { num: 3 },
+      Numbers { num: 4 },
+      Numbers { num: 5 },
+      Numbers { num: 6 },
+      Bonus {
+        min_points: 63,
+        value: 50,
+      },
+      SetOf { num: 3 },
+      SetOf { num: 4 },
+      FullHouse { value: 25 },
+      Straight {
+        min_length: 4,
+        value: 30,
+      },
+      Straight {
+        min_length: 5,
+        value: 40,
+      },
+      Chance {},
+      Yahtzee { value: 50 },
+    ],
   }
 }
 
-fn basic_rules() -> Vec<Box<dyn Scoring>> {
-  vec![
-    Box::new(Numbers { num: 1 }),
-    Box::new(Numbers { num: 2 }),
-    Box::new(Numbers { num: 3 }),
-    Box::new(Numbers { num: 4 }),
-    Box::new(Numbers { num: 5 }),
-    Box::new(Numbers { num: 6 }),
-    // TODO: Bonus
-    Box::new(SetOf { num: 3 }),
-    Box::new(SetOf { num: 4 }),
-    Box::new(FullHouse { value: 25 }),
-    Box::new(Straight {
-      min_length: 4,
-      value: 30,
-    }),
-    Box::new(Straight {
-      min_length: 5,
-      value: 40,
-    }),
-    Box::new(Chance {}),
-    Box::new(Yahtzee { value: 50 }),
-  ]
+fn roleplayers_rules() -> Ruleset {
+  Ruleset {
+    dice: vec![4, 6, 8, 10, 10],
+    scorings: vec![
+      Numbers { num: 1 },
+      Numbers { num: 2 },
+      Numbers { num: 3 },
+      Numbers { num: 4 },
+      Numbers { num: 5 },
+      Numbers { num: 6 },
+      Numbers { num: 7 },
+      Numbers { num: 8 },
+      Numbers { num: 9 },
+      Numbers { num: 10 },
+      Bonus {
+        min_points: 105,
+        value: 50,
+      },
+      SetOf { num: 3 },
+      SetOf { num: 4 },
+      FullHouse { value: 25 },
+      Straight {
+        min_length: 4,
+        value: 30,
+      },
+      Straight {
+        min_length: 5,
+        value: 40,
+      },
+      Chance {},
+      Yahtzee { value: 50 },
+    ],
+  }
 }
 
 #[cfg(test)]
@@ -228,26 +229,6 @@ mod tests {
   }
 
   #[test]
-  fn test_flush_length() {
-    // trivial cases
-    assert_eq!(longest_flush(&[5, 4, 3], 1, 0), 3);
-    assert_eq!(longest_flush(&[5, 4, 3, 2], 1, 0), 4);
-
-    // flush at start
-    assert_eq!(longest_flush(&[6, 5, 4, 3, 1], 1, 0), 4);
-
-    // flush not at the start
-    assert_eq!(longest_flush(&[5, 5, 4, 3, 2], 1, 0), 4);
-    assert_eq!(longest_flush(&[6, 4, 3, 2, 1], 1, 0), 4);
-
-    // flush of four in middle :)
-    assert_eq!(longest_flush(&[9, 7, 6, 5, 4, 2, 1], 1, 0), 4);
-
-    // dupe in the middle :(
-    assert_eq!(longest_flush(&[6, 5, 4, 4, 3], 1, 0), 4);
-  }
-
-  #[test]
   fn test_small_straight() {
     let small_straight = Straight {
       min_length: 4,
@@ -274,6 +255,11 @@ mod tests {
       small_straight.score(&[6, 5, 4, 4, 3]),
       30,
       "Upper small straight with dupe in the middle",
+    );
+    assert_eq!(
+      small_straight.score(&[6, 5, 4, 3, 2]),
+      30,
+      "A large straight is also a small straight"
     )
   }
 
