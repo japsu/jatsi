@@ -107,16 +107,13 @@ impl Scoring {
         _ => 0,
       },
 
-      Yahtzee { value } => match roll {
-        [x, rest @ ..] => {
-          if rest.iter().all(|&y| *x == y) {
-            value
-          } else {
-            0
-          }
+      Yahtzee { value } => {
+        if roll.iter().all(|&x| x == roll[0]) {
+          value
+        } else {
+          0
         }
-        [] => 0,
-      },
+      }
 
       Chance => roll.iter().sum(),
     }
