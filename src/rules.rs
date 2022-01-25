@@ -19,9 +19,9 @@ fn is_straight_of_at_least(min_length: u64, roll: &[u64]) -> bool {
       // if we have a straight longer than required, this will go negative, hence i64
       let mut required = min_length as i64 - 1;
 
-      for i in rest {
-        if *i == y - 1 {
-          y = *i;
+      for &i in rest {
+        if i == y - 1 {
+          y = i;
           required -= 1;
         }
       }
