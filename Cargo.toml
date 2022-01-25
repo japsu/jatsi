@@ -13,4 +13,5 @@ categories = ["gui", "wasm", "web-programming"]
 yew = "0.19"
 itertools = "*"
 rand = "*"
+getrandom = { version = "*", features = ["js"] }
 either = "*"
