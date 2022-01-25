@@ -1,4 +1,4 @@
-enum Scoring {
+pub enum Scoring {
   Numbers { num: u64 },
   Bonus { min_points: u64, value: u64 },
   SetOf { num: u64 },
@@ -120,20 +120,21 @@ impl Scoring {
   }
 }
 
-enum JokerRule {
+pub enum JokerRule {
   Forced,
   FreeChoice,
   Original,
   NoJoker,
 }
 
-struct Ruleset {
-  dice: Vec<u64>,
-  scorings: Vec<Scoring>,
-  joker_rule: JokerRule, // not implemented yet
+pub struct Ruleset {
+  pub dice: Vec<u64>,
+  pub scorings: Vec<Scoring>,
+  pub joker_rule: JokerRule, // not implemented yet
+  pub rolls: u64,            // 3
 }
 
-fn ee_rules() -> Ruleset {
+pub fn ee_rules() -> Ruleset {
   Ruleset {
     dice: vec![6; 5],
     scorings: vec![
@@ -162,6 +163,7 @@ fn ee_rules() -> Ruleset {
       Yahtzee { value: 50 },
     ],
     joker_rule: JokerRule::Forced,
+    rolls: 3,
   }
 }
 
@@ -201,32 +203,45 @@ fn roleplayers_rules() -> Ruleset {
       Yahtzee { value: 50 },
     ],
     joker_rule: JokerRule::Forced,
+    rolls: 3,
+  }
+}
+
+impl Ruleset {
+  pub fn rounds(&self) -> usize {
+    self
+      .scorings
+      .iter()
+      .filter(|item| if let Bonus { .. } = item { false } else { true })
+      .count()
   }
 }
 
 #[derive(PartialEq, Debug)]
-enum UpdateErr {
+pub enum InvalidUpdate {
   OutOfBounds,
   AlreadyOccupied,
   NotSelectable,
 }
 
-fn update_score_sheet(
+pub fn update_score_sheet(
   score_sheet: &[Option<u64>],
   scorings: &[Scoring],
   selected_index: usize,
   roll: &[u64],
-) -> Result<Vec<Option<u64>>, UpdateErr> {
-  let scoring = scorings.get(selected_index).ok_or(UpdateErr::OutOfBounds)?;
+) -> Result<Vec<Option<u64>>, InvalidUpdate> {
+  let scoring = scorings
+    .get(selected_index)
+    .ok_or(InvalidUpdate::OutOfBounds)?;
   let &current_row = score_sheet
     .get(selected_index)
-    .ok_or(UpdateErr::OutOfBounds)?;
+    .ok_or(InvalidUpdate::OutOfBounds)?;
 
   let mut roll_points = scoring.score(roll);
 
   // The Bonus row cannot be selected.
   if let Bonus { .. } = scoring {
-    return Err(UpdateErr::NotSelectable);
+    return Err(InvalidUpdate::NotSelectable);
   }
 
   // Usually you cannot choose the same row twice.
@@ -236,10 +251,10 @@ fn update_score_sheet(
       if roll_points > 0 && existing_points > 0 {
         roll_points += existing_points
       } else {
-        return Err(UpdateErr::AlreadyOccupied);
+        return Err(InvalidUpdate::AlreadyOccupied);
       }
     } else {
-      return Err(UpdateErr::AlreadyOccupied);
+      return Err(InvalidUpdate::AlreadyOccupied);
     }
   }
 

@@ -11,3 +11,6 @@ categories = ["gui", "wasm", "web-programming"]
 
 [dependencies]
 yew = "0.19"
+itertools = "*"
+rand = "*"
+either = "*"
