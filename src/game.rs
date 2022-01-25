@@ -297,10 +297,10 @@ mod tests {
     let mut game = Game::new(ruleset);
     game.add_player("Japsu".into());
 
-    let mut game = game._start(vec![5, 5, 4, 3, 2]);
+    let game = game._start(vec![5, 5, 4, 3, 2]);
 
     // we still have rolls left
-    let mut game = match game._reroll(vec![5, 5, 5, 1, 1]) {
+    let game = match game._reroll(vec![5, 5, 5, 1, 1]) {
       Left(game) => game,
       Right(_) => panic!(),
     };
@@ -319,7 +319,7 @@ mod tests {
       })
       .unwrap();
 
-    let mut game = match game._place(full_house_index, vec![1, 1, 1, 1, 1]).unwrap() {
+    let _game = match game._place(full_house_index, vec![1, 1, 1, 1, 1]).unwrap() {
       Left(game) => game,
       Right(_) => panic!(),
     };
