@@ -33,7 +33,36 @@ pub struct Game<S> {
 
 fn roll_dice(dice: &[u64]) -> Vec<u64> {
   let mut rng = rand::thread_rng();
-  dice.iter().map(|&sides| rng.gen_range(1..=sides)).collect()
+  let mut result = dice
+    .iter()
+    .map(|&sides| rng.gen_range(1..=sides))
+    .collect::<Vec<u64>>();
+
+  // always biggest first
+  result.sort();
+  result.reverse();
+
+  result
+}
+
+fn roll_dice_keeping(dice: &[u64], old_roll: &[u64], keep: &[bool]) -> Vec<u64> {
+  let mut rng = rand::thread_rng();
+
+  let mut result = izip!(dice, old_roll, keep)
+    .map(|(&sides, &old_value, &kept)| {
+      if kept {
+        old_value
+      } else {
+        rng.gen_range(1..=sides)
+      }
+    })
+    .collect::<Vec<u64>>();
+
+  // always biggest first
+  result.sort();
+  result.reverse();
+
+  result
 }
 
 impl Game<Start> {
@@ -129,18 +158,7 @@ fn _place(
 
 impl Game<Reroll> {
   pub fn reroll(self, keep: &[bool]) -> Either<Game<Reroll>, Game<Place>> {
-    let mut rng = rand::thread_rng();
-
-    let roll = izip!(&self.ruleset.dice, &self.state.roll, keep)
-      .map(|(&sides, &old_value, &kept)| {
-        if kept {
-          old_value
-        } else {
-          rng.gen_range(1..=sides)
-        }
-      })
-      .collect();
-
+    let roll = roll_dice_keeping(&self.ruleset.dice, &self.state.roll, keep);
     self._reroll(roll)
   }
 
@@ -298,6 +316,8 @@ mod tests {
     game.add_player("Japsu".into());
 
     let game = game._start(vec![5, 5, 4, 3, 2]);
+
+    // bah! puny small straight! let's keep the 5 5 and reroll the 4 3 2
 
     // we still have rolls left
     let game = match game._reroll(vec![5, 5, 5, 1, 1]) {
