@@ -1,35 +1,31 @@
-html,
-body {
-  height: 100%;
+// minimal css reset from https://www.digitalocean.com/community/tutorials/css-minimal-css-reset
+html {
+  box-sizing: border-box;
+  font-size: 16px;
+}
+
+*, *:before, *:after {
+  box-sizing: inherit;
+}
+
+body, h1, h2, h3, h4, h5, h6, p, ol, ul {
   margin: 0;
+  padding: 0;
+  font-weight: normal;
 }
 
-body {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-
-  background: linear-gradient(to bottom right, #444444, #009a5b);
-  font-size: 1.5rem;
+ol, ul {
+  list-style: none;
 }
 
-main {
-  color: #fff6d5;
-  font-family: sans-serif;
-  text-align: center;
+img {
+  max-width: 100%;
+  height: auto;
 }
 
-.logo {
-  height: 20em;
-}
-
-.heart:after {
-  content: "❤️";
-
-  font-size: 1.75em;
-}
-
-h1 + .subtitle {
-  display: block;
-  margin-top: -1em;
+// app style
+html {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #ddd;
+  background-color: #333;
 }
