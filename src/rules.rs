@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq, Clone)]
 pub enum Scoring {
   Numbers { num: u64 },
   Bonus { min_points: u64, value: u64 },
@@ -33,7 +34,7 @@ fn is_straight_of_at_least(min_length: u64, roll: &[u64]) -> bool {
 }
 
 impl Scoring {
-  fn name(&self) -> String {
+  pub fn name(&self) -> String {
     match *self {
       Numbers { num } => match num {
         1 => "Ones".into(),
@@ -65,7 +66,7 @@ impl Scoring {
     }
   }
 
-  fn score(&self, roll: &[u64]) -> u64 {
+  pub fn score(&self, roll: &[u64]) -> u64 {
     match *self {
       Numbers { num } => roll.iter().filter(|&&x| x == num).sum(),
 

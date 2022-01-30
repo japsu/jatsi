@@ -1,4 +1,5 @@
 mod components;
+mod dice;
 mod game;
 mod rules;
 

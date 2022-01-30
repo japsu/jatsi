@@ -2,263 +2,128 @@ use either::Either::{self, Left, Right};
 use itertools::izip;
 use rand::Rng;
 
-use crate::rules::{update_score_sheet, InvalidUpdate, Ruleset};
+use crate::dice::{roll_dice, roll_dice_keeping};
+use crate::rules::{ee_rules, update_score_sheet, InvalidUpdate, Ruleset};
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Player {
   pub name: String,
   pub score_sheet: Vec<Option<u64>>,
 }
 
-pub struct Start {}
-pub struct Reroll {
+#[derive(Debug)]
+pub enum State {
+  Start,
+  Reroll,
+  Place,
+  End,
+}
+
+use State::*;
+
+pub struct Game {
+  pub players: Vec<Player>,
+  pub ruleset: Ruleset,
+  pub state: State,
   pub round: usize,
   pub player_in_turn: usize,
   pub times_rolled: u64,
   pub roll: Vec<u64>,
 }
 
-pub struct Place {
-  pub round: usize,
-  pub player_in_turn: usize,
-  pub roll: Vec<u64>,
-}
-
-pub struct End {}
-
-pub struct Game<S> {
-  pub players: Vec<Player>,
-  pub ruleset: Ruleset,
-  pub state: S,
-}
-
-fn roll_dice(dice: &[u64]) -> Vec<u64> {
-  let mut rng = rand::thread_rng();
-  let mut result = dice
-    .iter()
-    .map(|&sides| rng.gen_range(1..=sides))
-    .collect::<Vec<u64>>();
-
-  // always biggest first
-  result.sort();
-  result.reverse();
-
-  result
-}
-
-fn roll_dice_keeping(dice: &[u64], old_roll: &[u64], keep: &[bool]) -> Vec<u64> {
-  let mut rng = rand::thread_rng();
-
-  let mut result = izip!(dice, old_roll, keep)
-    .map(|(&sides, &old_value, &kept)| {
-      if kept {
-        old_value
-      } else {
-        rng.gen_range(1..=sides)
-      }
-    })
-    .collect::<Vec<u64>>();
-
-  // always biggest first
-  result.sort();
-  result.reverse();
-
-  result
-}
-
-impl Game<Start> {
-  pub fn new(ruleset: Ruleset) -> Game<Start> {
-    Game {
+impl Game {
+  pub fn new(ruleset: Ruleset) -> Self {
+    Self {
       players: Vec::new(),
       ruleset,
       state: Start {},
+      round: 0,
+      player_in_turn: 0,
+      times_rolled: 0,
+      roll: vec![],
     }
   }
 
+  pub fn dummy() -> Self {
+    let rules = ee_rules();
+    let mut game = Self::new(rules);
+    game.add_player("Japsu".into());
+    game
+  }
+
+  fn roll_dice(&self) -> Vec<u64> {
+    roll_dice(&self.ruleset.dice)
+  }
+
+  fn roll_dice_keeping(&self, keep: &[bool]) -> Vec<u64> {
+    roll_dice_keeping(&self.ruleset.dice, &self.roll, keep)
+  }
+
+  // TODO state checking
   pub fn add_player(&mut self, name: String) {
     let num_rows = self.ruleset.scorings.len();
     let score_sheet = vec![None; num_rows];
     self.players.push(Player { name, score_sheet });
   }
 
-  pub fn start(self) -> Game<Reroll> {
+  pub fn start(&mut self) {
     let roll = roll_dice(&self.ruleset.dice);
     self._start(roll)
   }
 
-  fn _start(self, roll: Vec<u64>) -> Game<Reroll> {
-    Game {
-      players: self.players,
-      ruleset: self.ruleset,
-      state: Reroll {
-        round: 0,
-        player_in_turn: 0,
-        times_rolled: 1,
-        roll,
-      },
-    }
+  fn _start(&mut self, roll: Vec<u64>) {
+    self.round = 0;
+    self.player_in_turn = 0;
+    self.times_rolled = 1;
+    self.roll = self.roll_dice();
   }
-}
 
-/// Common implementation of Game<Reroll>::place and Game<Place>::place.
-fn _place(
-  mut players: Vec<Player>,
-  ruleset: Ruleset,
-  round: usize,
-  player_in_turn: usize,
-  selected_row: usize,
-  roll: &[u64],
-  next_roll: Vec<u64>,
-) -> Result<Either<Game<Reroll>, Game<End>>, InvalidUpdate> {
-  let score_sheet = update_score_sheet(
-    &players[player_in_turn].score_sheet,
-    &ruleset.scorings,
-    selected_row,
-    &roll,
-  )?;
-
-  players[player_in_turn].score_sheet = score_sheet;
-
-  let player_in_turn = player_in_turn + 1;
-  if player_in_turn < players.len() {
-    Ok(Left(Game {
-      ruleset,
-      players,
-      state: Reroll {
-        round,
-        player_in_turn,
-        times_rolled: 1,
-        roll: next_roll,
-      },
-    }))
-  } else {
-    // End of round
-    let player_in_turn = 0;
-    let round = round + 1;
-
-    if round <= ruleset.rounds() {
-      Ok(Left(Game {
-        ruleset,
-        players,
-        state: Reroll {
-          round,
-          player_in_turn,
-          times_rolled: 1,
-          roll: next_roll,
-        },
-      }))
-    } else {
-      Ok(Right(Game {
-        ruleset,
-        players,
-        state: End {},
-      }))
-    }
-  }
-}
-
-impl Game<Reroll> {
-  pub fn reroll(self, keep: &[bool]) -> Either<Game<Reroll>, Game<Place>> {
-    let roll = roll_dice_keeping(&self.ruleset.dice, &self.state.roll, keep);
+  pub fn reroll(&mut self, keep: &[bool]) {
+    let roll = self.roll_dice_keeping(keep);
     self._reroll(roll)
   }
 
-  fn _reroll(self, roll: Vec<u64>) -> Either<Game<Reroll>, Game<Place>> {
-    let times_rolled = self.state.times_rolled + 1;
-    let player_in_turn = self.state.player_in_turn;
-    let round = self.state.round;
+  fn _reroll(&mut self, roll: Vec<u64>) {
+    let times_rolled = self.times_rolled + 1;
+    let player_in_turn = self.player_in_turn;
+    let round = self.round;
 
-    if times_rolled < self.ruleset.rolls {
-      // rerolls left, can reroll or place
-      Left(Game {
-        state: Reroll {
-          round,
-          player_in_turn,
-          times_rolled,
-          roll,
-        },
-        ..self
-      })
-    } else {
-      // all rerolls used, can only place
-      Right(Game {
-        players: self.players,
-        ruleset: self.ruleset,
-        state: Place {
-          round,
-          player_in_turn,
-          roll,
-        },
-      })
+    if times_rolled >= self.ruleset.rolls {
+      self.state = Reroll;
     }
   }
 
-  fn place(self, selected_row: usize) -> Result<Either<Game<Reroll>, Game<End>>, InvalidUpdate> {
-    let next_roll = roll_dice(&self.ruleset.dice);
-    _place(
-      self.players,
-      self.ruleset,
-      self.state.round,
-      self.state.player_in_turn,
-      selected_row,
-      &self.state.roll,
-      next_roll,
-    )
+  fn place(&mut self, selected_row: usize) {
+    let next_roll = self.roll_dice();
+    self._place(selected_row, next_roll)
   }
 
-  fn _place(
-    self,
-    selected_row: usize,
-    next_roll: Vec<u64>,
-  ) -> Result<Either<Game<Reroll>, Game<End>>, InvalidUpdate> {
-    _place(
-      self.players,
-      self.ruleset,
-      self.state.round,
-      self.state.player_in_turn,
+  fn _place(&mut self, selected_row: usize, next_roll: Vec<u64>) {
+    let score_sheet = update_score_sheet(
+      &self.players[self.player_in_turn].score_sheet,
+      &self.ruleset.scorings,
       selected_row,
-      &self.state.roll,
-      next_roll,
+      &self.roll,
     )
-  }
-}
+    .unwrap();
 
-impl Game<Place> {
-  fn place(self, selected_row: usize) -> Result<Either<Game<Reroll>, Game<End>>, InvalidUpdate> {
-    let next_roll = roll_dice(&self.ruleset.dice);
-    _place(
-      self.players,
-      self.ruleset,
-      self.state.round,
-      self.state.player_in_turn,
-      selected_row,
-      &self.state.roll,
-      next_roll,
-    )
-  }
+    self.players[self.player_in_turn].score_sheet = score_sheet;
 
-  fn _place(
-    self,
-    selected_row: usize,
-    next_roll: Vec<u64>,
-  ) -> Result<Either<Game<Reroll>, Game<End>>, InvalidUpdate> {
-    _place(
-      self.players,
-      self.ruleset,
-      self.state.round,
-      self.state.player_in_turn,
-      selected_row,
-      &self.state.roll,
-      next_roll,
-    )
-  }
-}
+    self.player_in_turn += 1;
+    if self.player_in_turn < self.players.len() {
+      self.times_rolled = 1;
+      self.state = Reroll;
+    } else {
+      // End of round
+      self.player_in_turn = 0;
+      self.round += 1;
 
-impl Game<End> {
-  fn rematch(self) -> Game<Start> {
-    Game {
-      players: self.players,
-      ruleset: self.ruleset,
-      state: Start {},
+      if self.round <= self.ruleset.rounds() {
+        self.state = Reroll;
+        self.times_rolled = 1;
+      } else {
+        self.state = End;
+      }
     }
   }
 
@@ -301,6 +166,10 @@ mod tests {
       players,
       ruleset,
       state: End {},
+      player_in_turn: 0,
+      roll: vec![],
+      round: 0,
+      times_rolled: 0,
     };
     let scoreboard = game.scoreboard();
     assert_eq!(scoreboard.len(), 1);
@@ -315,15 +184,12 @@ mod tests {
     let mut game = Game::new(ruleset);
     game.add_player("Japsu".into());
 
-    let game = game._start(vec![5, 5, 4, 3, 2]);
+    game._start(vec![5, 5, 4, 3, 2]);
 
     // bah! puny small straight! let's keep the 5 5 and reroll the 4 3 2
 
     // we still have rolls left
-    let game = match game._reroll(vec![5, 5, 5, 1, 1]) {
-      Left(game) => game,
-      Right(_) => panic!(),
-    };
+    game._reroll(vec![5, 5, 5, 1, 1]);
 
     // okay now we have full house, let's place
     let full_house_index = game
@@ -339,9 +205,6 @@ mod tests {
       })
       .unwrap();
 
-    let _game = match game._place(full_house_index, vec![1, 1, 1, 1, 1]).unwrap() {
-      Left(game) => game,
-      Right(_) => panic!(),
-    };
+    game._place(full_house_index, vec![1, 1, 1, 1, 1]);
   }
 }
