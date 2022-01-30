@@ -33,6 +33,18 @@ pub fn score_table(props: &ScoreCardProps) -> Html {
     }
   });
 
+  let total_footers = props
+    .players
+    .iter()
+    .map(|player| {
+      player
+        .score_sheet
+        .iter()
+        .map(|maybe_points| maybe_points.unwrap_or(0))
+        .sum::<u64>()
+    })
+    .map(|points| html! { <th>{points.to_string()}</th> });
+
   html! {
     <table>
       <thead>
@@ -44,6 +56,12 @@ pub fn score_table(props: &ScoreCardProps) -> Html {
       <tbody>
         { for scoring_rows }
       </tbody>
+      <tfoot>
+        <tr>
+          <th>{"Total"}</th>
+          { for total_footers }
+        </tr>
+      </tfoot>
     </table>
   }
 }
