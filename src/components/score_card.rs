@@ -1,0 +1,49 @@
+use yew::{function_component, html, Properties};
+
+use crate::game::Player;
+use crate::rules::Scoring;
+
+#[derive(PartialEq, Properties)]
+pub struct ScoreCardProps {
+  pub scorings: Vec<Scoring>,
+  pub players: Vec<Player>,
+}
+
+#[function_component(ScoreCard)]
+pub fn score_table(props: &ScoreCardProps) -> Html {
+  let player_headers = props
+    .players
+    .iter()
+    .map(|player| html! { <th>{player.name.clone() }</th> });
+
+  let scoring_rows = props.scorings.iter().enumerate().map(|(i, scoring)| {
+    let player_scorings = props.players.iter().map(|player| {
+      if let Some(points) = player.score_sheet[i] {
+        html! { <td>{points.to_string()}</td> }
+      } else {
+        html! { <td></td> }
+      }
+    });
+
+    html! {
+      <tr>
+        <th>{scoring.name()}</th>
+        { for player_scorings }
+      </tr>
+    }
+  });
+
+  html! {
+    <table>
+      <thead>
+        <tr>
+          <th/>
+          { for player_headers }
+        </tr>
+      </thead>
+      <tbody>
+        { for scoring_rows }
+      </tbody>
+    </table>
+  }
+}

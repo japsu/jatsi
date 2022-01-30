@@ -24,7 +24,7 @@ pub fn die(props: &DieProps) -> Html {
   let active_dots = &DOTS_FOR_VALUE[(props.value - 1) as usize];
 
   html! {
-    <g>
+    <svg class="die" viewBox="-1000 -1000 2000 2000">
       <rect x="-1000" y="-1000" width="2000" height="2000" rx={DOT_RADIUS} fill="#ccc" />
       {
         izip!(&DOTS, active_dots)
@@ -39,6 +39,6 @@ pub fn die(props: &DieProps) -> Html {
           })
           .collect::<Html>()
       }
-    </g>
+    </svg>
   }
 }

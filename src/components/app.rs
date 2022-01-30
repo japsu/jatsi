@@ -1,17 +1,43 @@
-use yew::{function_component, html};
+use crate::components::die::Die;
+use crate::components::score_card::ScoreCard;
+use crate::game::Game;
+use yew::{html, Component, Context, Html};
 
-use super::die::Die;
-use super::regular_polygon::RegularPolygon;
+pub enum Msg {}
 
-#[function_component(App)]
-pub fn app() -> Html {
-  html! {
-    <main>
-      <svg viewBox="-1000 -1000 2000 2000" width={300} height={300}>
-        /*<RegularPolygon p={3} r={200} />
-        <text x={0} y={0} fill="#333" font-size="72pt" text-anchor="middle" dominant-baseline="middle">{6}</text>*/
-        <Die value=6 />
-      </svg>
-    </main>
+pub struct App {
+  game: Game,
+}
+
+impl Component for App {
+  type Message = Msg;
+  type Properties = ();
+
+  fn create(_ctx: &Context<Self>) -> Self {
+    Self {
+      game: Game::dummy(),
+    }
+  }
+
+  fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+    false
+  }
+
+  fn view(&self, _ctx: &Context<Self>) -> Html {
+    html! {
+      <>
+        <ScoreCard scorings={self.game.ruleset.scorings.clone()} players={self.game.players.clone()} />
+        <div class="dice">
+          <Die value={2} />
+          <Die value={3} />
+          <Die value={4} />
+          <Die value={5} />
+          <Die value={6} />
+        </div>
+        <div class="container">
+          <button>{"Toss a die for your witcher!"}</button>
+        </div>
+      </>
+    }
   }
 }
