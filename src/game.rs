@@ -21,6 +21,7 @@ pub enum State {
 
 use State::*;
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Game {
   pub players: Vec<Player>,
   pub ruleset: Ruleset,
@@ -33,6 +34,7 @@ pub struct Game {
 
 impl Game {
   pub fn new(ruleset: Ruleset) -> Self {
+    let num_dice = ruleset.dice.len();
     Self {
       players: Vec::new(),
       ruleset,
@@ -40,7 +42,7 @@ impl Game {
       round: 0,
       player_in_turn: 0,
       times_rolled: 0,
-      roll: vec![],
+      roll: vec![1; num_dice],
     }
   }
 

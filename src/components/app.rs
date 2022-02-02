@@ -3,7 +3,7 @@ use crate::components::score_card::ScoreCard;
 use crate::dice::roll_dice_keeping;
 use crate::game::Game;
 use itertools::izip;
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 use yew::{events::MouseEvent, html, Component, Context, Html};
 
 pub enum Msg {
@@ -14,8 +14,7 @@ pub enum Msg {
 use Msg::*;
 
 pub struct App {
-  game: Rc<Game>,
-  roll: Vec<u64>,
+  game: Rc<RefCell<Game>>,
   keep: Vec<bool>,
 }
 
@@ -26,23 +25,21 @@ impl Component for App {
   fn create(_ctx: &Context<Self>) -> Self {
     let game = Game::dummy();
     let num_dice = game.ruleset.dice.len();
-    let roll = vec![1; num_dice];
     let keep = vec![false; num_dice];
 
     Self {
-      game: Rc::new(game),
-      roll,
+      game: Rc::new(RefCell::new(game)),
       keep,
     }
   }
 
   fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
-    let num_dice = self.game.ruleset.dice.len();
+    let mut game = self.game.borrow_mut();
 
     match msg {
       ToggleHold(i) => self.keep[i] = !self.keep[i],
       Reroll => {
-        self.roll = roll_dice_keeping(&self.game.ruleset.dice, &self.roll, &self.keep);
+        game.roll = roll_dice_keeping(&game.ruleset.dice, &game.roll, &self.keep);
       }
     }
 
@@ -50,7 +47,8 @@ impl Component for App {
   }
 
   fn view(&self, ctx: &Context<Self>) -> Html {
-    let dice = izip!(&self.roll, &self.keep)
+    let game = self.game.borrow();
+    let dice = izip!(&game.roll, &self.keep)
       .enumerate()
       .map(|(ind, (&value, &kept))| {
         let onclick = ctx.link().callback(move |e: MouseEvent| {

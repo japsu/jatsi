@@ -94,13 +94,19 @@ impl Scoring {
       }
 
       // Not used by *ee rules but used by *y rules
-      TwoPairs {} => match *roll {
-        // remember: they're ordered
-        [x, y, z, w, _] if x == y && z == w => x + y + z + w,
-        [x, y, _, w, h] if x == y && w == h => x + y + w + h,
-        [_, y, z, w, h] if y == z && w == h => y + z + w + h,
-        _ => 0,
-      },
+      TwoPairs {} => {
+        let mut roll = roll.to_vec();
+        roll.sort();
+        roll.reverse();
+
+        match *roll {
+          // remember: they're ordered
+          [x, y, z, w, _] if x == y && z == w => x + y + z + w,
+          [x, y, _, w, h] if x == y && w == h => x + y + w + h,
+          [_, y, z, w, h] if y == z && w == h => y + z + w + h,
+          _ => 0,
+        }
+      }
 
       FullHouse { value } => match *roll {
         [x, y, z, w, h] if x == y && z == w && w == h => value,
@@ -121,6 +127,7 @@ impl Scoring {
   }
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum JokerRule {
   Forced,
   FreeChoice,
@@ -128,6 +135,7 @@ pub enum JokerRule {
   NoJoker,
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Ruleset {
   pub dice: Vec<u64>,
   pub scorings: Vec<Scoring>,

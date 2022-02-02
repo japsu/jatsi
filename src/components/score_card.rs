@@ -2,35 +2,35 @@ use yew::{function_component, html, Properties};
 
 use crate::game::Game;
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(Properties)]
 pub struct ScoreCardProps {
-  pub game: Rc<Game>,
+  pub game: Rc<RefCell<Game>>,
 }
 
 impl PartialEq for ScoreCardProps {
   fn eq(&self, other: &Self) -> bool {
-    Rc::ptr_eq(&self.game, &other.game)
+    *self.game.borrow() == *other.game.borrow()
   }
 }
 
 #[function_component(ScoreCard)]
 pub fn score_table(props: &ScoreCardProps) -> Html {
-  let player_headers = props
-    .game
+  let game = props.game.borrow();
+  let player_headers = game
     .players
     .iter()
     .map(|player| html! { <th>{player.name.clone() }</th> });
 
-  let scoring_rows = props
-    .game
+  let scoring_rows = game
     .ruleset
     .scorings
     .iter()
     .enumerate()
     .map(|(i, scoring)| {
-      let player_scorings = props.game.players.iter().map(|player| {
+      let player_scorings = game.players.iter().map(|player| {
         if let Some(points) = player.score_sheet[i] {
           html! { <td>{points.to_string()}</td> }
         } else {
@@ -46,8 +46,7 @@ pub fn score_table(props: &ScoreCardProps) -> Html {
       }
     });
 
-  let total_footers = props
-    .game
+  let total_footers = game
     .players
     .iter()
     .map(|player| {
