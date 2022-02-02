@@ -1,39 +1,53 @@
 use yew::{function_component, html, Properties};
 
-use crate::game::Player;
-use crate::rules::Scoring;
+use crate::game::Game;
 
-#[derive(PartialEq, Properties)]
+use std::rc::Rc;
+
+#[derive(Properties)]
 pub struct ScoreCardProps {
-  pub scorings: Vec<Scoring>,
-  pub players: Vec<Player>,
+  pub game: Rc<Game>,
+}
+
+impl PartialEq for ScoreCardProps {
+  fn eq(&self, other: &Self) -> bool {
+    Rc::ptr_eq(&self.game, &other.game)
+  }
 }
 
 #[function_component(ScoreCard)]
 pub fn score_table(props: &ScoreCardProps) -> Html {
   let player_headers = props
+    .game
     .players
     .iter()
     .map(|player| html! { <th>{player.name.clone() }</th> });
 
-  let scoring_rows = props.scorings.iter().enumerate().map(|(i, scoring)| {
-    let player_scorings = props.players.iter().map(|player| {
-      if let Some(points) = player.score_sheet[i] {
-        html! { <td>{points.to_string()}</td> }
-      } else {
-        html! { <td></td> }
+  let scoring_rows = props
+    .game
+    .ruleset
+    .scorings
+    .iter()
+    .enumerate()
+    .map(|(i, scoring)| {
+      let player_scorings = props.game.players.iter().map(|player| {
+        if let Some(points) = player.score_sheet[i] {
+          html! { <td>{points.to_string()}</td> }
+        } else {
+          html! { <td></td> }
+        }
+      });
+
+      html! {
+        <tr>
+          <th>{scoring.name()}</th>
+          { for player_scorings }
+        </tr>
       }
     });
 
-    html! {
-      <tr>
-        <th>{scoring.name()}</th>
-        { for player_scorings }
-      </tr>
-    }
-  });
-
   let total_footers = props
+    .game
     .players
     .iter()
     .map(|player| {

@@ -11,7 +11,7 @@ pub struct Player {
   pub score_sheet: Vec<Option<u64>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum State {
   Start,
   Reroll,
