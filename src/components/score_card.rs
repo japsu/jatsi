@@ -1,28 +1,19 @@
-use yew::{function_component, html, Properties};
-
 use crate::game::Game;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-#[derive(Properties)]
-pub struct ScoreCardProps {
-  pub game: Rc<RefCell<Game>>,
+use dioxus::prelude::*;
+#[derive(Props)]
+pub struct ScoreCardProps<'a> {
+  pub game: &'a UseRef<Game>,
 }
 
-impl PartialEq for ScoreCardProps {
-  fn eq(&self, other: &Self) -> bool {
-    *self.game.borrow() == *other.game.borrow()
-  }
-}
+#[allow(non_snake_case)]
+pub fn ScoreCard<'a>(cx: Scope<'a, ScoreCardProps<'a>>) -> Element {
+  let game = cx.props.game.read();
 
-#[function_component(ScoreCard)]
-pub fn score_table(props: &ScoreCardProps) -> Html {
-  let game = props.game.borrow();
   let player_headers = game
     .players
     .iter()
-    .map(|player| html! { <th>{player.name.clone() }</th> });
+    .map(|player| rsx! ( th { [player.name.clone()] }));
 
   let scoring_rows = game
     .ruleset
@@ -30,20 +21,20 @@ pub fn score_table(props: &ScoreCardProps) -> Html {
     .iter()
     .enumerate()
     .map(|(i, scoring)| {
-      let player_scorings = game.players.iter().map(|player| {
+      let player_scorings = game.players.iter().map(move |player| {
         if let Some(points) = player.score_sheet[i] {
-          html! { <td>{points.to_string()}</td> }
+          rsx!(td { [points.to_string()] })
         } else {
-          html! { <td></td> }
+          rsx!(td {})
         }
       });
 
-      html! {
-        <tr>
-          <th>{scoring.name()}</th>
-          { for player_scorings }
-        </tr>
-      }
+      rsx! (
+        tr {
+          th { [scoring.name()] }
+          player_scorings
+        }
+      )
     });
 
   let total_footers = game
@@ -56,25 +47,27 @@ pub fn score_table(props: &ScoreCardProps) -> Html {
         .map(|maybe_points| maybe_points.unwrap_or(0))
         .sum::<u64>()
     })
-    .map(|points| html! { <th>{points.to_string()}</th> });
+    .map(|points| rsx!(th { [points.to_string()] }));
 
-  html! {
-    <table>
-      <thead>
-        <tr>
-          <th/>
-          { for player_headers }
-        </tr>
-      </thead>
-      <tbody>
-        { for scoring_rows }
-      </tbody>
-      <tfoot>
-        <tr>
-          <th>{"Total"}</th>
-          { for total_footers }
-        </tr>
-      </tfoot>
-    </table>
-  }
+  cx.render(rsx! (
+    table {
+      thead {
+        tr {
+          th {}
+          player_headers
+        }
+      }
+
+      tbody {
+        scoring_rows
+      }
+
+      tfoot {
+        tr {
+          th { "Total" }
+          total_footers
+        }
+      }
+    }
+  ))
 }

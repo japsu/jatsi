@@ -5,6 +5,8 @@ mod rules;
 
 use crate::components::app::App;
 
+use dioxus::prelude::*;
+
 fn main() {
-    yew::start_app::<App>();
+  dioxus::web::launch(App);
 }

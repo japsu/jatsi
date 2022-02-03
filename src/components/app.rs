@@ -2,74 +2,60 @@ use crate::components::die::Die;
 use crate::components::score_card::ScoreCard;
 use crate::dice::roll_dice_keeping;
 use crate::game::Game;
-use itertools::izip;
-use std::{cell::RefCell, rc::Rc};
-use yew::{events::MouseEvent, html, Component, Context, Html};
+use dioxus::events::MouseEvent;
+use dioxus::prelude::*;
 
-pub enum Msg {
-  ToggleHold(usize),
-  Reroll,
-}
+#[allow(non_snake_case)]
+pub fn App(cx: Scope) -> Element {
+  let game = use_ref(&cx, || Game::dummy());
+  let num_dice = game.read().ruleset.dice.len();
+  let keep = use_ref(&cx, || vec![false; num_dice]);
 
-use Msg::*;
+  let dice = game
+    .read()
+    .roll
+    .iter()
+    .zip(keep.read().iter())
+    .enumerate()
+    .map(|(ind, (&value, &kept))| {
+      rsx!(Die {
+        value: value,
+        keep: kept,
+        onclick: move |_: MouseEvent| {
+          let mut keep = keep.write();
+          keep[ind] = !keep[ind];
+        },
+      })
+    })
+    .collect::<Vec<LazyNodes>>();
 
-pub struct App {
-  game: Rc<RefCell<Game>>,
-  keep: Vec<bool>,
-}
+  let toss = move |_| {
+    let mut game = game.write();
+    let keep = keep.read();
+    game.roll = roll_dice_keeping(&game.ruleset.dice, &game.roll, &keep);
+  };
 
-impl Component for App {
-  type Message = Msg;
-  type Properties = ();
+  rsx!(cx,
+    div {
+      ScoreCard {
+        game: &game
+      }
 
-  fn create(_ctx: &Context<Self>) -> Self {
-    let game = Game::dummy();
-    let num_dice = game.ruleset.dice.len();
-    let keep = vec![false; num_dice];
+      div {
+        class: "dice",
 
-    Self {
-      game: Rc::new(RefCell::new(game)),
-      keep,
-    }
-  }
+        dice
+      }
 
-  fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
-    let mut game = self.game.borrow_mut();
+      div {
+        class: "container",
 
-    match msg {
-      ToggleHold(i) => self.keep[i] = !self.keep[i],
-      Reroll => {
-        game.roll = roll_dice_keeping(&game.ruleset.dice, &game.roll, &self.keep);
+        button {
+          onclick: toss,
+          prevent_default: "onclick",
+          "Toss a die for your witcher!"
+        }
       }
     }
-
-    true
-  }
-
-  fn view(&self, ctx: &Context<Self>) -> Html {
-    let game = self.game.borrow();
-    let dice = izip!(&game.roll, &self.keep)
-      .enumerate()
-      .map(|(ind, (&value, &kept))| {
-        let onclick = ctx.link().callback(move |e: MouseEvent| {
-          e.prevent_default();
-          ToggleHold(ind)
-        });
-        html! { <Die value={value} onclick={onclick} keep={kept} />}
-      });
-
-    let roll = ctx.link().callback(|_| Reroll);
-
-    html! {
-      <>
-        <ScoreCard game={self.game.clone()} />
-        <div class="dice">
-          { for dice }
-        </div>
-        <div class="container">
-          <button onclick={roll}>{"Toss a die for your witcher!"}</button>
-        </div>
-      </>
-    }
-  }
+  )
 }
