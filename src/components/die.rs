@@ -49,9 +49,13 @@ pub fn Die<'a>(cx: Scope<'a, DieProps<'a>>) -> Element {
 
   rsx!(cx,
     svg {
+      class: "die",
+
+      // https://github.com/DioxusLabs/dioxus/issues/197
       onclick: |e| onclick.call(e),
       // prevent_default: "onclick",
-      class: "die",
+      "dioxus-prevent-default": "onclick",
+
       view_box: "-1000 -1000 2000 2000",
 
       rect {
