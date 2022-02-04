@@ -68,7 +68,9 @@ th, td {
 
 .die {
   max-width: 300px;
+  height: auto;
   margin: $gap / 2;
+  background: none;
 }
 
 .container {

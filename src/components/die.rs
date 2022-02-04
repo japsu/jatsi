@@ -19,7 +19,7 @@ const DOTS_FOR_VALUE: [[bool; 7]; 6] = [
   [true, true, true, true, true, true, false],
 ];
 const OFFSET: i64 = 600;
-const DOT_RADIUS: &str = "200";
+const DOT_RADIUS: u64 = 200;
 const HELD_COLOR: &str = "#aaa";
 const UNHELD_COLOR: &str = "#ddd";
 
@@ -47,27 +47,37 @@ pub fn Die<'a>(cx: Scope<'a, DieProps<'a>>) -> Element {
       })
     });
 
+  let sr_text = format!(
+    "Die, value {}, {}",
+    value,
+    if *keep {
+      "held. Click to release."
+    } else {
+      "not held. Click to hold."
+    }
+  );
+
   rsx!(cx,
-    svg {
+    button {
       class: "die",
-
-      // https://github.com/DioxusLabs/dioxus/issues/197
       onclick: |e| onclick.call(e),
-      // prevent_default: "onclick",
-      "dioxus-prevent-default": "onclick",
+      prevent_default: "onclick",
+      title: "{sr_text}",
 
-      view_box: "-1000 -1000 2000 2000",
+      svg {
+        view_box: "-1000 -1000 2000 2000",
 
-      rect {
-        x: "-1000",
-        y: "-1000",
-        width: "2000",
-        height: "2000",
-        rx: "{DOT_RADIUS}",
-        fill: "{fill}",
+        rect {
+          x: "-1000",
+          y: "-1000",
+          width: "2000",
+          height: "2000",
+          rx: "{DOT_RADIUS}",
+          fill: "{fill}",
+        }
+
+        dots
       }
-
-      dots
     }
   )
 }
