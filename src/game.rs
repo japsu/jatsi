@@ -19,10 +19,30 @@ pub enum State {
   End,
 }
 
-use State::*;
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum PlayerMessage {
+  StartGame,
+  ToggleHold(usize),
+  Roll,
+  Place(usize),
+}
 
-#[derive(Debug, PartialEq, Clone)]
+pub enum GameMessage {
+  PlayerJoined(usize, String),
+  PlayerMessage(usize, PlayerMessage),
+  RollResult(Vec<u64>),
+  GameFinished,
+}
+
+pub enum InvalidAction {
+  NotYourTurn,
+  WrongState,
+  RollsExceeded,
+  OutOfBounds,
+}
+
 pub struct Game {
+  pub message_history: Vec<GameMessage>,
   pub players: Vec<Player>,
   pub ruleset: Ruleset,
   pub state: State,
@@ -36,6 +56,7 @@ impl Game {
   pub fn new(ruleset: Ruleset) -> Self {
     let num_dice = ruleset.dice.len();
     Self {
+      message_history: Vec::new(),
       players: Vec::new(),
       ruleset,
       state: Start {},
@@ -46,6 +67,29 @@ impl Game {
     }
   }
 
+  pub fn handle_player_message(
+    &mut self,
+    from_player: usize,
+    msg: &PlayerMessage,
+  ) -> Result<GameMessage, InvalidAction> {
+    if from_player != self.player_in_turn {
+      return Err(InvalidAction::NotYourTurn);
+    }
+
+    match msg {
+      PlayerMessage::StartGame => {
+        if let State::Start = &self.state {
+          self.start();
+        }
+      }
+      _ => todo!(),
+    }
+
+    Ok(GameMessage::PlayerMessage(self.player_in_turn, *msg))
+  }
+}
+
+impl Game {
   pub fn dummy() -> Self {
     let rules = ee_rules();
     let mut game = Self::new(rules);
