@@ -110,11 +110,16 @@ impl Scoring {
         }
       }
 
-      FullHouse { value } => match *roll {
-        [x, y, z, w, h] if x == y && z == w && w == h => value,
-        [x, y, z, w, h] if x == y && y == z && w == h => value,
-        _ => 0,
-      },
+      FullHouse { value } => {
+        let mut roll = roll.to_vec();
+        roll.sort();
+        roll.reverse();
+        match *roll {
+          [x, y, z, w, h] if x == y && z == w && w == h => value,
+          [x, y, z, w, h] if x == y && y == z && w == h => value,
+          _ => 0,
+        }
+      }
 
       Yahtzee { value } => {
         if roll.iter().all(|&x| x == roll[0]) {

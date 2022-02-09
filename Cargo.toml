@@ -11,5 +11,4 @@ license = "MIT"
 itertools = "*"
 rand = "*"
 getrandom = { version = "*", features = ["js"] }
-either = "*"
 dioxus = { version = "*", features = ["web"] }

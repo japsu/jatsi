@@ -322,7 +322,6 @@ name = "jatsi"
 version = "0.1.0"
 dependencies = [
  "dioxus",
- "either",
  "getrandom",
  "itertools",
  "rand",
