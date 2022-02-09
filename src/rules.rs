@@ -1,3 +1,5 @@
+use crate::errors::InvalidAction;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Scoring {
   Numbers { num: u64 },
@@ -143,6 +145,27 @@ pub struct Ruleset {
   pub rolls: u64,            // 3
 }
 
+/// Mini ruleset. Mainly useful for testing.
+pub fn mini_rules() -> Ruleset {
+  Ruleset {
+    dice: vec![6; 5],
+    scorings: vec![
+      Numbers { num: 6 },
+      Bonus {
+        min_points: 24,
+        value: 50,
+      },
+      FullHouse { value: 25 },
+      Straight {
+        min_length: 4,
+        value: 30,
+      },
+    ],
+    joker_rule: JokerRule::Forced,
+    rolls: 3,
+  }
+}
+
 pub fn ee_rules() -> Ruleset {
   Ruleset {
     dice: vec![6; 5],
@@ -226,31 +249,24 @@ impl Ruleset {
   }
 }
 
-#[derive(PartialEq, Debug)]
-pub enum InvalidUpdate {
-  OutOfBounds,
-  AlreadyOccupied,
-  NotSelectable,
-}
-
 pub fn update_score_sheet(
   score_sheet: &[Option<u64>],
   scorings: &[Scoring],
   selected_index: usize,
   roll: &[u64],
-) -> Result<Vec<Option<u64>>, InvalidUpdate> {
+) -> Result<Vec<Option<u64>>, InvalidAction> {
   let scoring = scorings
     .get(selected_index)
-    .ok_or(InvalidUpdate::OutOfBounds)?;
+    .ok_or(InvalidAction::OutOfBounds)?;
   let &current_row = score_sheet
     .get(selected_index)
-    .ok_or(InvalidUpdate::OutOfBounds)?;
+    .ok_or(InvalidAction::OutOfBounds)?;
 
   let mut roll_points = scoring.score(roll);
 
   // The Bonus row cannot be selected.
   if let Bonus { .. } = scoring {
-    return Err(InvalidUpdate::NotSelectable);
+    return Err(InvalidAction::NotSelectable);
   }
 
   // Usually you cannot choose the same row twice.
@@ -260,10 +276,10 @@ pub fn update_score_sheet(
       if roll_points > 0 && existing_points > 0 {
         roll_points += existing_points
       } else {
-        return Err(InvalidUpdate::AlreadyOccupied);
+        return Err(InvalidAction::AlreadyOccupied);
       }
     } else {
-      return Err(InvalidUpdate::AlreadyOccupied);
+      return Err(InvalidAction::AlreadyOccupied);
     }
   }
 

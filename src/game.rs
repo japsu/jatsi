@@ -3,7 +3,8 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
 use crate::dice::{roll_dice, roll_dice_keeping};
-use crate::rules::{ee_rules, update_score_sheet, InvalidUpdate, Ruleset};
+use crate::errors::InvalidAction;
+use crate::rules::{ee_rules, update_score_sheet, Ruleset};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Player {
@@ -14,6 +15,7 @@ pub struct Player {
 #[derive(Debug, PartialEq, Clone)]
 pub enum State {
   Start,
+  FirstRoll,
   Reroll,
   Place,
   End,
@@ -36,27 +38,6 @@ pub enum GameMessage {
   GameFinished,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum InvalidAction {
-  NotYourTurn,
-  WrongState,
-  RollsExceeded,
-  OutOfBounds,
-}
-
-impl Display for InvalidAction {
-  fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-    match &self {
-      Self::NotYourTurn => write!(f, "not your turn"),
-      Self::WrongState => write!(f, "cannot perform this action in this state"),
-      Self::RollsExceeded => write!(f, "rerolls exceeded"),
-      Self::OutOfBounds => write!(f, "out of bounds (this should'nt happen :)"),
-    }
-  }
-}
-
-impl Error for InvalidAction {}
-
 pub struct Game {
   pub message_history: Vec<GameMessage>,
   pub players: Vec<Player>,
@@ -66,6 +47,7 @@ pub struct Game {
   pub player_in_turn: usize,
   pub times_rolled: u64,
   pub roll: Vec<u64>,
+  pub keep: Vec<bool>,
 }
 
 impl Game {
@@ -80,9 +62,20 @@ impl Game {
       player_in_turn: 0,
       times_rolled: 0,
       roll: vec![1; num_dice],
+      keep: vec![false; num_dice],
     }
   }
 
+  pub fn dummy() -> Self {
+    let rules = ee_rules();
+    let mut game = Self::new(rules);
+    game
+      .handle_player_message(0, &PlayerMessage::JoinGame("Japsu".into()))
+      .unwrap();
+    game
+  }
+
+  /// Called at the leader to process actions from players.
   pub fn handle_player_message(
     &mut self,
     from_player: usize,
@@ -101,99 +94,131 @@ impl Game {
     messages.push(GameMessage::PlayerMessage(from_player, msg.clone()));
 
     match msg {
-      PlayerMessage::JoinGame(name) => {
-        let name = name.clone();
-        let num_rows = self.ruleset.scorings.len();
-        let score_sheet = vec![None; num_rows];
-        self.players.push(Player { name, score_sheet });
-      }
-      PlayerMessage::StartGame => {
-        if let State::Start = &self.state {
-          self.round = 0;
-          self.player_in_turn = 0;
-          self.times_rolled = 0;
-          messages.push(GameMessage::PlayerTurn(self.player_in_turn))
+      PlayerMessage::JoinGame(..) => match &self.state {
+        State::Start => {}
+        _ => return Err(InvalidAction::WrongState),
+      },
+      PlayerMessage::StartGame => match &self.state {
+        State::Start => messages.push(GameMessage::PlayerTurn(self.player_in_turn)),
+        _ => return Err(InvalidAction::WrongState),
+      },
+
+      PlayerMessage::ToggleHold(num) => match &self.state {
+        State::Reroll => {
+          if *num >= self.ruleset.dice.len() {
+            return Err(InvalidAction::OutOfBounds);
+          }
         }
-      }
-      _ => todo!(),
+        _ => return Err(InvalidAction::WrongState),
+      },
+      PlayerMessage::Roll => match &self.state {
+        State::FirstRoll => {
+          let roll = self.roll_dice();
+          messages.push(GameMessage::RollResult(roll));
+        }
+        State::Reroll => {
+          let roll = self.roll_dice_keeping();
+          messages.push(GameMessage::RollResult(roll));
+        }
+        _ => return Err(InvalidAction::WrongState),
+      },
+      PlayerMessage::Place(num) => match &self.state {
+        State::Reroll | State::Place => {
+          if *num >= self.ruleset.scorings.len() {
+            return Err(InvalidAction::OutOfBounds);
+          }
+
+          let next_player = self.player_in_turn + 1;
+          let next_round = self.round + 1;
+          if next_player < self.players.len() {
+            messages.push(GameMessage::PlayerTurn(next_player));
+          } else if next_round <= self.ruleset.rounds() {
+            messages.push(GameMessage::PlayerTurn(0))
+          } else {
+            messages.push(GameMessage::GameFinished)
+          }
+        }
+        _ => return Err(InvalidAction::WrongState),
+      },
     }
 
-    self.message_history.append(&mut messages.clone());
+    for message in messages.iter() {
+      self.handle_game_message(message)?;
+    }
 
     Ok(messages)
   }
 
-  pub fn dummy() -> Self {
-    let rules = ee_rules();
-    let mut game = Self::new(rules);
-    game.handle_player_message(0, &PlayerMessage::JoinGame("Japsu".into()));
-    game
+  /// Called at the followers to process game state updates from the leader.
+  pub fn handle_game_message(&mut self, msg: &GameMessage) -> Result<(), InvalidAction> {
+    self.message_history.push(msg.clone());
+    let num_rows = self.ruleset.scorings.len();
+    let num_dice = self.ruleset.dice.len();
+
+    match msg {
+      GameMessage::PlayerMessage(_from_player, player_msg) => match player_msg {
+        PlayerMessage::JoinGame(name) => {
+          let name = name.clone();
+          let score_sheet = vec![None; num_rows];
+          self.players.push(Player { name, score_sheet });
+        }
+        PlayerMessage::StartGame => {
+          // all logic handled in GameMessage::PlayerTurn(0)
+        }
+        PlayerMessage::ToggleHold(num) => {
+          let held = self.keep.get_mut(*num).ok_or(InvalidAction::OutOfBounds)?;
+          *held = !*held;
+        }
+        PlayerMessage::Roll => {
+          self.times_rolled = self.times_rolled + 1;
+        }
+        PlayerMessage::Place(selected_row) => {
+          let mut player = self
+            .players
+            .get_mut(self.player_in_turn)
+            .ok_or(InvalidAction::OutOfBounds)?;
+
+          player.score_sheet = update_score_sheet(
+            &player.score_sheet,
+            &self.ruleset.scorings,
+            *selected_row,
+            &self.roll,
+          )?;
+        }
+      },
+      GameMessage::PlayerTurn(player) => {
+        self.times_rolled = 0;
+        self.keep = vec![false; num_dice];
+        self.roll = vec![1; num_dice];
+        self.player_in_turn = *player;
+        self.state = State::FirstRoll;
+        if self.player_in_turn == 0 {
+          self.round += 1;
+        }
+      }
+      GameMessage::RollResult(roll) => {
+        self.roll = roll.clone();
+
+        if self.times_rolled < self.ruleset.rolls {
+          self.state = State::Reroll;
+        } else {
+          self.state = State::Place;
+        }
+      }
+      GameMessage::GameFinished => {
+        self.state = State::End;
+      }
+    }
+
+    Ok(())
   }
 
   fn roll_dice(&self) -> Vec<u64> {
     roll_dice(&self.ruleset.dice)
   }
 
-  fn roll_dice_keeping(&self, keep: &[bool]) -> Vec<u64> {
-    roll_dice_keeping(&self.ruleset.dice, &self.roll, keep)
-  }
-
-  pub fn start(&mut self) {
-    let roll = roll_dice(&self.ruleset.dice);
-    self._start(roll)
-  }
-
-  fn _start(&mut self, roll: Vec<u64>) {
-    self.roll = self.roll_dice();
-  }
-
-  pub fn reroll(&mut self, keep: &[bool]) {
-    let roll = self.roll_dice_keeping(keep);
-    self._reroll(roll)
-  }
-
-  fn _reroll(&mut self, roll: Vec<u64>) {
-    let times_rolled = self.times_rolled + 1;
-    let player_in_turn = self.player_in_turn;
-    let round = self.round;
-
-    if times_rolled >= self.ruleset.rolls {
-      self.state = State::Reroll;
-    }
-  }
-
-  fn place(&mut self, selected_row: usize) {
-    let next_roll = self.roll_dice();
-    self._place(selected_row, next_roll)
-  }
-
-  fn _place(&mut self, selected_row: usize, next_roll: Vec<u64>) {
-    let score_sheet = update_score_sheet(
-      &self.players[self.player_in_turn].score_sheet,
-      &self.ruleset.scorings,
-      selected_row,
-      &self.roll,
-    )
-    .unwrap();
-
-    self.players[self.player_in_turn].score_sheet = score_sheet;
-
-    self.player_in_turn += 1;
-    if self.player_in_turn < self.players.len() {
-      self.times_rolled = 1;
-      self.state = State::Reroll;
-    } else {
-      // End of round
-      self.player_in_turn = 0;
-      self.round += 1;
-
-      if self.round <= self.ruleset.rounds() {
-        self.state = State::Reroll;
-        self.times_rolled = 1;
-      } else {
-        self.state = State::End;
-      }
-    }
+  fn roll_dice_keeping(&self) -> Vec<u64> {
+    roll_dice_keeping(&self.ruleset.dice, &self.roll, &self.keep)
   }
 
   fn scoreboard(&self) -> Vec<(u64, &str)> {
@@ -223,55 +248,44 @@ mod tests {
   use std::collections::VecDeque;
 
   use super::*;
-  use crate::rules::{ee_rules, Scoring};
+  use crate::rules::{mini_rules, Scoring};
 
   /// Runs a game and compares its messages to an expected transcript.
-  /// All PlayerMessages are sent to the Game, and following non-PlayerMessage GameMessages are checked to be equal.
-  fn run_game(game: &mut Game, expected_messages: Vec<GameMessage>) -> Result<(), Box<dyn Error>> {
-    let mut grouped_messages: Vec<Vec<GameMessage>> = vec![];
+  /// All PlayerMessages are sent to the Game, RollResults overwrite the actual roll result, and other messages are checked to be equal.
+  fn run_game(game: &mut Game, expected_messages: Vec<GameMessage>) {
+    let mut actual_messages = VecDeque::new();
 
-    // Group messages so that there is always a PlayerMessage and then server messages followed by it
-    {
-      let mut player_message: Option<GameMessage> = None;
-      let mut response_messages: Vec<GameMessage> = vec![];
+    for expected_message in expected_messages {
+      println!("{:?}: {:?}", game.state, expected_message);
 
-      for message in expected_messages {
-        match message {
-          GameMessage::PlayerMessage(..) => {
-            if let Some(previous_player_message) = player_message {
-              let mut group = vec![previous_player_message];
-              group.append(&mut response_messages);
-              grouped_messages.push(group);
-              player_message = Some(message);
-            } else {
-              player_message = Some(message);
-            }
-          }
-          _ => response_messages.push(message),
+      match expected_message {
+        GameMessage::PlayerMessage(from_player, ref player_msg) => {
+          let mut response_messages: VecDeque<GameMessage> = game
+            .handle_player_message(from_player, &player_msg.clone())
+            .unwrap()
+            .into();
+          let actual_player_msg = response_messages.pop_front().unwrap();
+          assert_eq!(actual_player_msg, expected_message);
+          actual_messages.append(&mut response_messages);
+        }
+        GameMessage::RollResult(roll) => {
+          let actual_roll_message = actual_messages.pop_front().unwrap();
+          assert!(matches!(actual_roll_message, GameMessage::RollResult(..)));
+          game.roll = roll.clone();
+        }
+        _ => {
+          let actual_message = actual_messages.pop_front().unwrap();
+          assert_eq!(actual_message, expected_message);
         }
       }
-
-      if let Some(previous_player_message) = player_message {
-        let mut group = vec![previous_player_message];
-        group.append(&mut response_messages);
-        grouped_messages.push(group);
-      }
     }
 
-    for group in grouped_messages {
-      let player_msg = group.first();
-      if let Some(GameMessage::PlayerMessage(from_player, player_message)) = player_msg {
-        let actual_messages = game.handle_player_message(*from_player, player_message)?;
-        assert_eq!(actual_messages, group);
-      } else {
-        panic!(
-          "First message of group should have been a PlayerMessage but was {:?}",
-          player_msg
-        )
-      }
-    }
-
-    Ok(())
+    assert_eq!(
+      actual_messages.len(),
+      0,
+      "leftover actual messages without expected counterpart: {:?}",
+      actual_messages
+    );
   }
 
   #[test]
@@ -285,29 +299,10 @@ mod tests {
   }
 
   #[test]
-  fn test_reroll_place() -> Result<(), Box<dyn Error>> {
-    let ruleset = ee_rules();
+  fn test_reroll_place() {
+    let ruleset = mini_rules();
     let mut game = Game::new(ruleset);
 
-    run_game(
-      &mut game,
-      vec![
-        GameMessage::PlayerMessage(0, PlayerMessage::JoinGame("Japsu".into())),
-        GameMessage::PlayerMessage(0, PlayerMessage::StartGame),
-        GameMessage::PlayerTurn(0),
-      ],
-    )?;
-
-    // TODO continue here
-
-    game._start(vec![5, 5, 4, 3, 2]);
-
-    // bah! puny small straight! let's keep the 5 5 and reroll the 4 3 2
-
-    // we still have rolls left
-    game._reroll(vec![5, 5, 5, 1, 1]);
-
-    // okay now we have full house, let's place
     let full_house_index = game
       .ruleset
       .scorings
@@ -321,8 +316,28 @@ mod tests {
       })
       .unwrap();
 
-    game._place(full_house_index, vec![1, 1, 1, 1, 1]);
-
-    Ok(())
+    run_game(
+      &mut game,
+      vec![
+        GameMessage::PlayerMessage(0, PlayerMessage::JoinGame("Henry".into())),
+        GameMessage::PlayerMessage(1, PlayerMessage::JoinGame("Bobby".into())),
+        GameMessage::PlayerMessage(0, PlayerMessage::StartGame),
+        // Round 1: Fight!
+        GameMessage::PlayerTurn(0),
+        GameMessage::PlayerMessage(0, PlayerMessage::Roll),
+        GameMessage::RollResult(vec![5, 3, 4, 5, 2]), // bah! puny small straight! let's keep the 5 5 and reroll the 4 3 2
+        GameMessage::PlayerMessage(0, PlayerMessage::ToggleHold(0)),
+        GameMessage::PlayerMessage(0, PlayerMessage::ToggleHold(3)),
+        GameMessage::PlayerMessage(0, PlayerMessage::Roll),
+        GameMessage::RollResult(vec![5, 5, 1, 5, 1]), // okay now we have full house, let's place
+        GameMessage::PlayerMessage(0, PlayerMessage::Place(full_house_index)),
+        GameMessage::PlayerTurn(1),
+        GameMessage::PlayerMessage(1, PlayerMessage::Roll),
+        GameMessage::RollResult(vec![2, 3, 2, 4, 1]),
+        GameMessage::PlayerMessage(1, PlayerMessage::Place(full_house_index)),
+        // Round 2
+        GameMessage::PlayerTurn(0),
+      ],
+    );
   }
 }
