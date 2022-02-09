@@ -259,23 +259,21 @@ mod tests {
 
   /// Runs a game and compares its messages to an expected transcript.
   /// All PlayerMessages are sent to the Game, RollResults overwrite the actual roll result, and other messages are checked to be equal.
-  fn run_game(game: &mut Game, expected_messages: Vec<GameMessage>) {
-    let mut game_messages = VecDeque::new();
+  fn run_game(game: &mut Game, expected_messages: &[GameMessage]) {
+    let mut game_messages = VecDeque::with_capacity(2);
 
     for expected_message in expected_messages {
       println!("{:?}: {:?}", game.state, expected_message);
 
       match expected_message {
-        GameMessage::PlayerMessage(from_player, ref player_msg) => {
+        GameMessage::PlayerMessage(from_player, player_msg) => {
           // Player message: Prepare the transaction, commit it and record the messages
           // to check that later messages will match them.
-          let mut response_messages: VecDeque<GameMessage> = game
-            .prepare(from_player, &player_msg.clone())
-            .unwrap()
-            .into();
+          let mut response_messages: VecDeque<GameMessage> =
+            game.prepare(*from_player, player_msg).unwrap().into();
 
           let actual_player_msg = response_messages.pop_front().unwrap();
-          assert_eq!(actual_player_msg, expected_message);
+          assert_eq!(&actual_player_msg, expected_message);
           game.commit(&expected_message).unwrap();
           game_messages.append(&mut response_messages);
         }
@@ -288,7 +286,7 @@ mod tests {
         _ => {
           // Any other message: Check that the message matches the recorded one.
           let actual_message = game_messages.pop_front().unwrap();
-          assert_eq!(actual_message, expected_message);
+          assert_eq!(&actual_message, expected_message);
           game.commit(&expected_message).unwrap();
         }
       }
@@ -308,7 +306,7 @@ mod tests {
 
     run_game(
       &mut game,
-      vec![
+      &[
         GameMessage::PlayerMessage(0, PlayerMessage::JoinGame("Henry".into())),
         GameMessage::PlayerMessage(1, PlayerMessage::JoinGame("Bobby".into())),
         GameMessage::PlayerMessage(0, PlayerMessage::StartGame),
@@ -376,7 +374,8 @@ mod tests {
     );
     assert_eq!(
       game.scoreboard(),
-      [(24 + 50 + 25 + 0, "Henry"), (18 + 0 + 0 + 0, "Bobby")]
+      [(24 + 50 + 25 + 0, "Henry"), (18 + 0 + 0 + 0, "Bobby")],
+      "scoreboard"
     );
 
     let mut game2 = Game::new(mini_rules());
