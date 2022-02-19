@@ -1,4 +1,4 @@
-use crate::game::Game;
+use jatsi_shared::game::Game;
 
 use dioxus::prelude::*;
 #[derive(Props)]

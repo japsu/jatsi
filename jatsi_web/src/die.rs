@@ -1,5 +1,4 @@
 use dioxus::{events::MouseEvent, prelude::*};
-use itertools::izip;
 
 #[derive(Props)]
 pub struct DieProps<'a> {
@@ -34,9 +33,11 @@ pub fn Die<'a>(cx: Scope<'a, DieProps<'a>>) -> Element {
 
   let active_dots = &DOTS_FOR_VALUE[(value - 1) as usize];
   let fill = if *keep { HELD_COLOR } else { UNHELD_COLOR };
-  let dots = izip!(&DOTS, active_dots)
+  let dots = DOTS
+    .iter()
+    .zip(active_dots.iter())
     .filter(|(_, &active)| active)
-    .map(|((x, y), _)| {
+    .map(|(&(x, y), _)| {
       let cx = x * OFFSET;
       let cy = y * OFFSET;
       rsx!(circle {

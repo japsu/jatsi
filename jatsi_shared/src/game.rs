@@ -1,3 +1,5 @@
+use serde::{self, Deserialize, Serialize};
+
 use crate::dice::{roll_dice, roll_dice_keeping};
 use crate::errors::InvalidAction;
 use crate::rules::{ee_rules, update_score_sheet, Ruleset};
@@ -17,7 +19,7 @@ pub enum State {
   End,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum PlayerMessage {
   JoinGame(String),
   StartGame,
@@ -26,7 +28,7 @@ pub enum PlayerMessage {
   Place(usize),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum GameMessage {
   PlayerMessage(usize, PlayerMessage),
   PlayerTurn(usize),
@@ -385,6 +387,15 @@ mod tests {
     assert_eq!(
       game, game2,
       "a game produced by replaying another's message history should be equal to the original one"
+    );
+
+    let history3 = serde_json::from_str::<Vec<GameMessage>>(
+      &serde_json::to_string(&game.message_history).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+      game.message_history, history3,
+      "messages should survive a serialize-deserialize cycle"
     );
   }
 }

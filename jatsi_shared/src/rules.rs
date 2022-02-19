@@ -88,7 +88,11 @@ impl Scoring {
       },
 
       Straight { min_length, value } => {
-        if is_straight_of_at_least(min_length, roll) {
+        let mut roll = roll.to_vec();
+        roll.sort();
+        roll.reverse();
+
+        if is_straight_of_at_least(min_length, &roll) {
           value
         } else {
           0
@@ -204,7 +208,7 @@ pub fn ee_rules() -> Ruleset {
   }
 }
 
-fn roleplayers_rules() -> Ruleset {
+pub fn roleplayers_rules() -> Ruleset {
   Ruleset {
     dice: vec![4, 6, 8, 10, 10],
     scorings: vec![
@@ -274,7 +278,7 @@ pub fn update_score_sheet(
     return Err(InvalidAction::NotSelectable);
   }
 
-  // Usually you cannot choose the same row twice.
+  // Usually you cannot choose the same row twice
   // The Yahtzee row is an exception: if you get it multiple times, it accumulates.
   if let Some(existing_points) = current_row {
     if let Yahtzee { .. } = scoring {

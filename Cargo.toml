@@ -1,14 +1,15 @@
-[package]
-name = "jatsi"
-version = "0.1.0"
-edition = "2021"
-description = "Dice game with configurable rules"
-readme = "README.md"
-repository = "https://github.com/japsu/jatsi"
-license = "MIT"
+# [package]
+# name = "jatsi"
+# version = "0.1.0"
+# edition = "2021"
+# description = "Dice game with configurable rules"
+# readme = "README.md"
+# repository = "https://github.com/japsu/jatsi"
+# license = "MIT"
 
-[dependencies]
-itertools = "*"
-rand = "*"
-getrandom = { version = "*", features = ["js"] }
-dioxus = { version = "*", features = ["web"] }
+[workspace]
+members = [
+    "jatsi_shared",
+    "jatsi_server",
+    "jatsi_web",
+]

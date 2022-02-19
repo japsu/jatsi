@@ -1,0 +1,15 @@
+[package]
+name = "jatsi_server"
+version = "0.1.0"
+edition = "2021"
+description = "Dice game with configurable rules"
+readme = "README.md"
+repository = "https://github.com/japsu/jatsi"
+license = "MIT"
+
+[dependencies]
+tokio-tungstenite = "*"
+futures-util = "*"
+log = "*"
+tokio = { version = "1", features = ["full"] }
+env_logger = "*"
