@@ -28,6 +28,6 @@ jobs:
       with:
         version: 'latest'
     - name: Build
-      run: trunk build
+      run: cd jatsi_web && trunk build
     - name: Run tests
       run: cargo test --verbose
