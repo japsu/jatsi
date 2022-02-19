@@ -1,3 +1,5 @@
+@use "sass:math";
+
 // minimal css reset from https://www.digitalocean.com/community/tutorials/css-minimal-css-reset
 html {
   box-sizing: border-box;
@@ -69,12 +71,12 @@ th, td {
 .die {
   max-width: 300px;
   height: auto;
-  margin: $gap / 2;
+  margin: math.div($gap, 2);
   background: none;
 }
 
 .container {
-  margin: $gap / 2;
+  margin: math.div($gap, 2);
 }
 
 button {
